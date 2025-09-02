@@ -1,0 +1,35 @@
+# 虚拟环境
+.env
+.venv
+
+# 日志文件
+*.log
+logs/
+
+# 配置文件
+app_config.json
+
+# 构建文件
+build/
+dist/
+build.py
+*.spec
+
+# 临时文件
+*.tmp
+*.temp
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE 文件
+.vscode/
+
+# 备份文件
+*.bak
+*.backup
+
+# 测试文件
+test_*.py
+*_test.py
