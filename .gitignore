@@ -18,6 +18,9 @@ build.py
 # 临时文件
 *.tmp
 *.temp
+__pycache__
+*.pyc
+*.pyd
 
 # 系统文件
 .DS_Store
