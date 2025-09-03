@@ -14,6 +14,7 @@ import os
 import sys
 import getpass
 import questionary
+import netifaces
 from datetime import datetime
 from typing import Dict, Optional, List
 from loguru import logger
@@ -180,19 +181,71 @@ class EnhancedCampusLogin:
 
     def get_local_ip(self) -> str:
         """
-        自动获取本机IP地址
+        智能获取本机IP地址，优先选择校园网段IP，避免VPN等虚拟网络
         """
         try:
-            # 创建一个UDP socket连接到外部地址来获取本机IP
+            # 获取所有网络接口
+            interfaces = netifaces.interfaces()
+            campus_ips = []
+            other_ips = []
+            
+            for interface in interfaces:
+                # 跳过回环接口和虚拟接口
+                if 'loopback' in interface.lower() or 'radmin' in interface.lower():
+                    continue
+                    
+                try:
+                    addrs = netifaces.ifaddresses(interface)
+                    if netifaces.AF_INET in addrs:
+                        for addr_info in addrs[netifaces.AF_INET]:
+                            ip = addr_info.get('addr')
+                            if ip and not ip.startswith('127.'):
+                                # 优先选择校园网段IP (172.19.x.x)
+                                if ip.startswith('172.19.'):
+                                    campus_ips.append(ip)
+                                    logger.debug(f"发现校园网IP: {ip} (接口: {interface})")
+                                # 其他私有网段IP作为备选
+                                elif (ip.startswith('192.168.') or 
+                                      ip.startswith('10.') or 
+                                      ip.startswith('172.')):
+                                    other_ips.append(ip)
+                                    logger.debug(f"发现其他IP: {ip} (接口: {interface})")
+                except Exception as e:
+                    logger.debug(f"读取接口 {interface} 失败: {e}")
+                    continue
+            
+            # 优先返回校园网段IP
+            if campus_ips:
+                selected_ip = campus_ips[0]
+                logger.info(f"选择校园网IP: {selected_ip}")
+                return selected_ip
+            
+            # 如果没有校园网IP，使用其他私有IP
+            if other_ips:
+                selected_ip = other_ips[0]
+                logger.info(f"选择备用IP: {selected_ip}")
+                return selected_ip
+            
+            # 如果都没有，尝试传统方法
+            logger.warning("未找到合适的网络接口，尝试传统方法获取IP")
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                 s.connect(("8.8.8.8", 80))
-                local_ip = s.getsockname()[0]
-            logger.debug(f"自动获取到本机IP: {local_ip}")
-            return local_ip
+                fallback_ip = s.getsockname()[0]
+                # 检查是否为校园网段
+                if fallback_ip.startswith('172.19.'):
+                    logger.info(f"传统方法获取到校园网IP: {fallback_ip}")
+                    return fallback_ip
+                else:
+                    logger.warning(f"传统方法获取的IP不在校园网段: {fallback_ip}")
+                    
         except Exception as e:
-            logger.warning(f"无法自动获取IP地址: {e}，使用配置文件中的IP")
-            user_config = self.config_manager.get_user_config()
-            return user_config.get('user_ip', '172.19.202.90')
+            logger.warning(f"无法自动获取IP地址: {e}")
+        
+        # 最后使用配置文件中的默认IP
+        user_config = self.config_manager.get_user_config()
+        default_ip = user_config.get('user_ip', '172.19.202.90')
+        logger.info(f"使用配置文件中的默认IP: {default_ip}")
+        return default_ip
     
     def check_network_status(self) -> bool:
         """
@@ -415,6 +468,7 @@ def main():
     print("=" * 50)
     print("常州工学院(CZU)校园网自动登录工具")
     print(f"启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("项目地址: https://github.com/Hanzzkj652/-CZU-Network")
     print("=" * 50)
     try:
         # 创建登录实例
